@@ -5,26 +5,15 @@
 #include "bip32.h"
 #include "ecdsa.h"
 #include "curves.h"
+#include "base58.h"
 
 char iter[256];
 uint8_t seed[512 / 8];
 uint8_t addr[21], pubkeyhash[20];
+char addrstr[80];
 int count = 0, found = 0;
 HDNode node, node2;
 clock_t start;
-
-char buf[65*2+1];
-static char *tohex(const uint8_t *bin, size_t l)
-{
-	static char digits[] = "0123456789abcdef";
-	for (size_t i = 0; i < l; i++) {
-		buf[i*2  ] = digits[(bin[i] >> 4) & 0xF];
-		buf[i*2+1] = digits[bin[i] & 0xF];
-	}
-	buf[l * 2] = 0;
-	return buf;
-}
-
 
 // around 280 tries per second
 
@@ -75,19 +64,17 @@ int main(int argc, char **argv)
 		hdnode_private_ckd_prime(&node, 0);
 		hdnode_private_ckd_prime(&node, 0);
 		hdnode_private_ckd(&node, 0);
-		for (int idx = 0; idx < 20; idx++) {
+		for (int idx = 0; idx < 3; idx++) {
 			node2 = node;
 			hdnode_private_ckd(&node2, idx);
 			hdnode_fill_public_key(&node2);
-			printf("%2d: %s\n", idx, tohex(node2.public_key, 33));
+			ecdsa_get_pubkeyhash(node2.public_key, addr+1);
+			addr[0] = 0;
+			base58_encode_check(addr, 21, addrstr, sizeof(addrstr));
+			printf("%d: %s: %s\n", idx, addrstr, iter);
 		}
 	}
 	float dur = (float)(clock() - start) / CLOCKS_PER_SEC;
 	printf("Tried %d %ss in %f seconds = %f tries/second\n", count, item, dur, (float)count/dur);
-	if (found) {
-		printf("Correct %s found! :-)\n\"%s\"\n", item, iter);
-		return 0;
-	}
-	printf("Correct %s not found. :-(\n", item);
-	return 4;
+	return 0;
 }
