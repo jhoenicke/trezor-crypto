@@ -10,8 +10,21 @@ char iter[256];
 uint8_t seed[512 / 8];
 uint8_t addr[21], pubkeyhash[20];
 int count = 0, found = 0;
-HDNode node;
+HDNode node, node2;
 clock_t start;
+
+char buf[65*2+1];
+static char *tohex(const uint8_t *bin, size_t l)
+{
+	static char digits[] = "0123456789abcdef";
+	for (size_t i = 0; i < l; i++) {
+		buf[i*2  ] = digits[(bin[i] >> 4) & 0xF];
+		buf[i*2+1] = digits[bin[i] & 0xF];
+	}
+	buf[l * 2] = 0;
+	return buf;
+}
+
 
 // around 280 tries per second
 
@@ -28,25 +41,16 @@ clock_t start;
 int main(int argc, char **argv)
 {
 	if (argc != 2 && argc != 3) {
-		fprintf(stderr, "Usage: bip39bruteforce address [mnemonic]\n");
+		fprintf(stderr, "Usage: bip39bruteforce password\n");
 		return 1;
 	}
-	const char *address = argv[1];
 	const char *mnemonic, *item;
-	if (argc == 3) {
-		mnemonic = argv[2];
-		item = "passphrase";
-	} else {
-		mnemonic = NULL;
-		item = "mnemonic";
-	}
+	mnemonic = NULL;
+	item = "mnemonic";
+	const char *password = argv[1];
 	if (mnemonic && !mnemonic_check(mnemonic)) {
 		fprintf(stderr, "\"%s\" is not a valid mnemonic\n", mnemonic);
 		return 2;
-	}
-	if (!ecdsa_address_decode(address, addr)) {
-		fprintf(stderr, "\"%s\" is not a valid address\n", address);
-		return 3;
 	}
 	printf("Reading %ss from stdin ...\n", item);
 	start = clock();
@@ -61,19 +65,21 @@ int main(int argc, char **argv)
 		if (mnemonic) {
 			mnemonic_to_seed(mnemonic, iter, seed, NULL);
 		} else {
-			mnemonic_to_seed(iter, "", seed, NULL);
+			if (!mnemonic_check(iter)) {
+				continue;
+			}
+			mnemonic_to_seed(iter, password, seed, NULL);
 		}
 		hdnode_from_seed(seed, 512 / 8, SECP256K1_NAME, &node);
 		hdnode_private_ckd_prime(&node, 44);
 		hdnode_private_ckd_prime(&node, 0);
 		hdnode_private_ckd_prime(&node, 0);
 		hdnode_private_ckd(&node, 0);
-		hdnode_private_ckd(&node, 0);
-		hdnode_fill_public_key(&node);
-		ecdsa_get_pubkeyhash(node.public_key, pubkeyhash);
-		if (memcmp(addr + 1, pubkeyhash, 20) == 0) {
-			found = 1;
-			break;
+		for (int idx = 0; idx < 20; idx++) {
+			node2 = node;
+			hdnode_private_ckd(&node2, idx);
+			hdnode_fill_public_key(&node2);
+			printf("%2d: %s\n", idx, tohex(node2.public_key, 33));
 		}
 	}
 	float dur = (float)(clock() - start) / CLOCKS_PER_SEC;
