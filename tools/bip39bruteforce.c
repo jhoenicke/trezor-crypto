@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <time.h>
 #include <string.h>
+#include <ctype.h>
 #include "bip39.h"
 #include "bip32.h"
 #include "ecdsa.h"
@@ -11,22 +12,58 @@ uint8_t seed[512 / 8];
 uint8_t addr[21], pubkeyhash[20];
 int count = 0, found = 0;
 HDNode node;
+HDNode childnode;
 clock_t start;
+
+int hexdecode(const char *address, uint8_t *decoded_addr) {
+	const char* hex = "0123456789abcdef";
+	if (address[0] == '0' && tolower(address[1]) == 'x') {
+		address += 2;
+	}
+	if (strlen(address) != 40) {
+		return 0;
+	}
+	for (int i = 0; i < 20; i++) {
+		char *high = strchr(hex, tolower(address[2*i]));
+		char *low  = strchr(hex, tolower(address[2*i+1]));
+		if (high == NULL || low == NULL) {
+			return 0;
+		}
+		decoded_addr[i] = ((high - hex) << 4) | (low - hex);
+	}
+	return 1;
+}
 
 // around 280 tries per second
 
 // testing data:
 //
 // mnemonic:   "all all all all all all all all all all all all"
-// address:    "1JAd7XCBzGudGpJQSDSfpmJhiygtLQWaGL"
+// address:    "0x574BbB36871bA6b78E27f4B4dCFb76eA0091880B"
 // passphrase: ""
+// path:       44'/60'/0'/0/2
 //
 // mnemonic:   "all all all all all all all all all all all all"
-// address:    "1N3uJ5AU3FTYQ1ZQgTMtYmgSvMBmQiGVBS"
+// address:    "0x74eC221471b48c9Afef4115Ea8954D37d10238b7"
 // passphrase: "testing"
+// path:       44'/61'/0'/0/0
 
 int main(int argc, char **argv)
 {
+	uint32_t prime = 0x80000000;
+	uint32_t paths[][5] = {
+		{ 44 | prime, 60 |prime, 0 | prime, 0, 0 },
+		{ 44 | prime, 60 |prime, 0 | prime, 0, 1 },
+		{ 44 | prime, 60 |prime, 0 | prime, 0, 2 },
+		{ 44 | prime, 60 |prime, 0 | prime, 0, 3 },
+		{ 44 | prime, 60 |prime, 0 | prime, 0, 4 },
+		{ 44 | prime, 61 |prime, 0 | prime, 0, 0 },
+		{ 44 | prime, 61 |prime, 0 | prime, 0, 1 },
+		{ 44 | prime, 61 |prime, 0 | prime, 0, 2 },
+		{ 44 | prime, 61 |prime, 0 | prime, 0, 3 },
+		{ 44 | prime, 61 |prime, 0 | prime, 0, 4 },
+	};
+
 	if (argc != 2 && argc != 3) {
 		fprintf(stderr, "Usage: bip39bruteforce address [mnemonic]\n");
 		return 1;
@@ -44,13 +81,13 @@ int main(int argc, char **argv)
 		fprintf(stderr, "\"%s\" is not a valid mnemonic\n", mnemonic);
 		return 2;
 	}
-	if (!ecdsa_address_decode(address, 0, addr)) {
+	if (!hexdecode(address, addr)) {
 		fprintf(stderr, "\"%s\" is not a valid address\n", address);
 		return 3;
 	}
 	printf("Reading %ss from stdin ...\n", item);
 	start = clock();
-	for (;;) {
+	while (!found) {
 		if (fgets(iter, 256, stdin) == NULL) break;
 		int len = strlen(iter);
 		if (len <= 0) {
@@ -64,16 +101,17 @@ int main(int argc, char **argv)
 			mnemonic_to_seed(iter, "", seed, NULL);
 		}
 		hdnode_from_seed(seed, 512 / 8, SECP256K1_NAME, &node);
-		hdnode_private_ckd_prime(&node, 44);
-		hdnode_private_ckd_prime(&node, 0);
-		hdnode_private_ckd_prime(&node, 0);
-		hdnode_private_ckd(&node, 0);
-		hdnode_private_ckd(&node, 0);
-		hdnode_fill_public_key(&node);
-		ecdsa_get_pubkeyhash(node.public_key, pubkeyhash);
-		if (memcmp(addr + 1, pubkeyhash, 20) == 0) {
-			found = 1;
-			break;
+		for (size_t j = 0; j < sizeof(paths)/sizeof(paths[0]); j++) {
+			childnode = node;
+			for (int k = 0; k < 5; k++) {
+				hdnode_private_ckd(&childnode, paths[j][k]);
+			}
+			hdnode_get_ethereum_pubkeyhash(&childnode, pubkeyhash);
+
+			if (memcmp(addr, pubkeyhash, 20) == 0) {
+				found = 1;
+				break;
+			}
 		}
 	}
 	float dur = (float)(clock() - start) / CLOCKS_PER_SEC;
