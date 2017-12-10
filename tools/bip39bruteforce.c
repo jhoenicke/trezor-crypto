@@ -9,6 +9,7 @@
 char iter[256];
 uint8_t seed[512 / 8];
 uint8_t addr[21], pubkeyhash[20];
+uint8_t rawaddr[24];
 int count = 0, found = 0;
 HDNode node;
 clock_t start;
@@ -44,7 +45,7 @@ int main(int argc, char **argv)
 		fprintf(stderr, "\"%s\" is not a valid mnemonic\n", mnemonic);
 		return 2;
 	}
-	if (!ecdsa_address_decode(address, 0, addr)) {
+	if (!ecdsa_address_decode(address, 5, addr)) {
 		fprintf(stderr, "\"%s\" is not a valid address\n", address);
 		return 3;
 	}
@@ -64,14 +65,14 @@ int main(int argc, char **argv)
 			mnemonic_to_seed(iter, "", seed, NULL);
 		}
 		hdnode_from_seed(seed, 512 / 8, SECP256K1_NAME, &node);
-		hdnode_private_ckd_prime(&node, 44);
+		hdnode_private_ckd_prime(&node, 49);
 		hdnode_private_ckd_prime(&node, 0);
 		hdnode_private_ckd_prime(&node, 0);
 		hdnode_private_ckd(&node, 0);
 		hdnode_private_ckd(&node, 0);
 		hdnode_fill_public_key(&node);
-		ecdsa_get_pubkeyhash(node.public_key, pubkeyhash);
-		if (memcmp(addr + 1, pubkeyhash, 20) == 0) {
+		ecdsa_get_address_segwit_p2sh_raw(node.public_key, 5, rawaddr);
+		if (memcmp(addr + 1, rawaddr + 1, 20) == 0) {
 			found = 1;
 			break;
 		}
