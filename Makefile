@@ -76,7 +76,7 @@ test_openssl: test_openssl.o $(OBJS)
 libtrezor-crypto.so: $(SRCS)
 	$(CC) $(CFLAGS) -fPIC -shared $(SRCS) -o libtrezor-crypto.so
 
-tools: tools/xpubaddrgen tools/mktable tools/bip39bruteforce
+tools: tools/xpubaddrgen tools/mktable tools/bip39bruteforce tools/mnemonicgen
 
 tools/xpubaddrgen: tools/xpubaddrgen.o $(OBJS)
 	$(CC) tools/xpubaddrgen.o $(OBJS) -o tools/xpubaddrgen
@@ -86,6 +86,9 @@ tools/mktable: tools/mktable.o $(OBJS)
 
 tools/bip39bruteforce: tools/bip39bruteforce.o $(OBJS)
 	$(CC) tools/bip39bruteforce.o $(OBJS) -o tools/bip39bruteforce
+
+tools/mnemonicgen: tools/mnemonicgen.o $(OBJS)
+	$(CC) tools/mnemonicgen.o $(OBJS) -o tools/mnemonicgen
 
 clean:
 	rm -f *.o aes/*.o chacha20poly1305/*.o ed25519-donna/*.o
